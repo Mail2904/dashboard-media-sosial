@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.express as px
 
 # ==================================================
-# KONFIGURASI HALAMAN
+# KONFIGURASI
 # ==================================================
 
 st.set_page_config(
@@ -12,10 +12,6 @@ st.set_page_config(
     page_icon="📊",
     layout="wide"
 )
-
-# ==================================================
-# DATABASE GITHUB
-# ==================================================
 
 DATA_URL = (
     "https://raw.githubusercontent.com/"
@@ -32,16 +28,22 @@ KOLOM_ANGKA = [
 
 KOLOM_WAJIB = ["Bulan"] + KOLOM_ANGKA
 
+# Urutan bulan agar grafik selalu kronologis.
+URUTAN_BULAN = [
+    "Jan-26", "Feb-26", "Mar-26", "Apr-26",
+    "May-26", "Jun-26", "Jul-26", "Aug-26",
+    "Sep-26", "Oct-26", "Nov-26", "Dec-26"
+]
+
 
 # ==================================================
-# FUNGSI MEMBACA DATABASE
+# MEMBACA DATABASE GITHUB
 # ==================================================
 
 @st.cache_data(ttl=60)
 def load_data():
     df = pd.read_csv(DATA_URL)
 
-    # Validasi kolom
     kolom_hilang = [
         kolom for kolom in KOLOM_WAJIB
         if kolom not in df.columns
@@ -49,28 +51,51 @@ def load_data():
 
     if kolom_hilang:
         raise ValueError(
-            "Kolom berikut tidak ditemukan di data.csv: "
+            "Kolom tidak ditemukan di data.csv: "
             + ", ".join(kolom_hilang)
         )
 
-    # Membersihkan data
     df["Bulan"] = df["Bulan"].astype("string").str.strip()
 
     df = df[
-        df["Bulan"].notna() & (df["Bulan"] != "")
+        df["Bulan"].notna()
+        & (df["Bulan"] != "")
     ].copy()
 
     for kolom in KOLOM_ANGKA:
+        # Mendukung angka biasa dan angka dengan
+        # pemisah ribuan titik, misalnya 1.103.
+        nilai = df[kolom].astype("string").str.strip()
+        nilai = nilai.str.replace(r"\s+", "", regex=True)
+        nilai = nilai.str.replace(".", "", regex=False)
+        nilai = nilai.str.replace(",", ".", regex=False)
+
         df[kolom] = pd.to_numeric(
-            df[kolom].astype("string")
-            .str.replace(".", "", regex=False)
-            .str.replace(",", ".", regex=False),
+            nilai,
             errors="coerce"
         )
 
-    # Baris tanpa angka tetap boleh ada di database,
-    # tetapi tidak digunakan dalam perhitungan.
+    # Bulan tanpa data angka tidak dipakai
+    # dalam grafik dan perhitungan.
+    df = df.dropna(subset=KOLOM_ANGKA, how="all")
+
+    df["_urutan"] = df["Bulan"].map(
+        {bulan: i for i, bulan in enumerate(URUTAN_BULAN)}
+    )
+
+    df = df.sort_values(
+        "_urutan",
+        na_position="last"
+    ).drop(columns="_urutan")
+
     return df
+
+
+def fmt(nilai, plus=False):
+    nilai = int(nilai)
+    if plus:
+        return f"{nilai:+,}".replace(",", ".")
+    return f"{nilai:,}".replace(",", ".")
 
 
 # ==================================================
@@ -78,7 +103,6 @@ def load_data():
 # ==================================================
 
 st.sidebar.title("📌 Menu Dashboard")
-
 st.sidebar.write(
     "Dashboard Performa Media Sosial "
     "Bengkel Mahaputra."
@@ -92,12 +116,12 @@ if st.sidebar.button(
     st.rerun()
 
 st.sidebar.caption(
-    "Data dibaca dari GitHub. "
-    "Cache otomatis diperbarui setiap 60 detik."
+    "Sumber database: GitHub | Cache 60 detik"
 )
 
+
 # ==================================================
-# MEMUAT DATABASE
+# LOAD DATA DAN PENANGANAN ERROR
 # ==================================================
 
 try:
@@ -105,14 +129,15 @@ try:
 
 except Exception as e:
     st.error(
-        "Data gagal dimuat. Periksa file data.csv, "
-        "URL GitHub, nama kolom, dan koneksi internet."
+        "Data gagal dimuat. Pastikan data.csv tersedia "
+        "di branch main dan nama kolom sudah benar."
     )
     st.code(str(e))
     st.stop()
 
+
 # ==================================================
-# FILTER BULAN
+# FILTER
 # ==================================================
 
 st.sidebar.divider()
@@ -128,38 +153,21 @@ df_filter = df[
     df["Bulan"].isin(bulan_terpilih)
 ].copy()
 
-# Hanya data yang memiliki angka untuk grafik
-df_valid = df_filter.dropna(subset=KOLOM_ANGKA, how="all")
-
-# ==================================================
-# JUDUL DASHBOARD
-# ==================================================
-
 st.title("📊 Dashboard Performa Media Sosial")
 
 st.markdown(
     """
-    Dashboard ini menampilkan perkembangan performa
-    media sosial Bengkel Mahaputra berdasarkan data bulanan
-    yang tersimpan di GitHub.
+    Dashboard ini menyajikan perkembangan performa
+    media sosial Bengkel Mahaputra berdasarkan data
+    bulanan yang disimpan di GitHub.
     """
 )
 
 st.caption(
-    f"Jumlah periode dipilih: {len(bulan_terpilih)} bulan"
+    f"Periode terpilih: {len(bulan_terpilih)} bulan"
 )
 
 st.divider()
-
-# ==================================================
-# FORMAT ANGKA
-# ==================================================
-
-def format_angka(nilai, tanda_plus=False):
-    nilai = int(nilai)
-    if tanda_plus:
-        return f"{nilai:+,}".replace(",", ".")
-    return f"{nilai:,}".replace(",", ".")
 
 
 # ==================================================
@@ -172,212 +180,172 @@ total_kunjungan = df_filter["Kunjungan Profil"].sum()
 total_tautan = df_filter["Ketukan Tautan Bio"].sum()
 total_follower = df_filter["Net Follower"].sum()
 
-kolom1, kolom2, kolom3, kolom4, kolom5 = st.columns(5)
+k1, k2, k3, k4, k5 = st.columns(5)
 
-with kolom1:
-    st.metric(
-        "👁️ Total Tayangan",
-        format_angka(total_tayangan)
-    )
+with k1:
+    st.metric("👁️ Total Tayangan", fmt(total_tayangan))
 
-with kolom2:
-    st.metric(
-        "💬 Total Interaksi",
-        format_angka(total_interaksi)
-    )
+with k2:
+    st.metric("💬 Total Interaksi", fmt(total_interaksi))
 
-with kolom3:
-    st.metric(
-        "👤 Kunjungan Profil",
-        format_angka(total_kunjungan)
-    )
+with k3:
+    st.metric("👤 Kunjungan Profil", fmt(total_kunjungan))
 
-with kolom4:
-    st.metric(
-        "🔗 Ketukan Tautan",
-        format_angka(total_tautan)
-    )
+with k4:
+    st.metric("🔗 Ketukan Tautan", fmt(total_tautan))
 
-with kolom5:
+with k5:
     st.metric(
         "📈 Net Follower",
-        format_angka(total_follower, tanda_plus=True)
+        fmt(total_follower, plus=True)
     )
 
 st.divider()
 
+
 # ==================================================
-# GRAFIK
+# GRAFIK TAYANGAN
 # ==================================================
 
-if df_valid.empty:
-    st.warning(
-        "Belum ada data angka untuk periode yang dipilih."
+st.subheader("📈 Perkembangan Tayangan")
+
+if not df_filter.empty:
+    fig = px.line(
+        df_filter,
+        x="Bulan",
+        y="Tayangan",
+        markers=True,
+        text="Tayangan"
     )
 
+    fig.update_traces(
+        texttemplate="%{y:,.0f}",
+        textposition="top center"
+    )
+
+    fig.update_layout(
+        xaxis_title="Bulan",
+        yaxis_title="Jumlah Tayangan",
+        hovermode="x unified"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
 else:
-    # Grafik tayangan
-    st.subheader("📈 Perkembangan Tayangan")
+    st.info("Pilih setidaknya satu bulan yang memiliki data.")
 
-    data_tayangan = df_valid.dropna(subset=["Tayangan"])
 
-    if not data_tayangan.empty:
-        fig_tayangan = px.line(
-            data_tayangan,
+# ==================================================
+# GRAFIK INTERAKSI DAN PROFIL
+# ==================================================
+
+kolom1, kolom2 = st.columns(2)
+
+with kolom1:
+    st.subheader("💬 Total Interaksi")
+
+    if not df_filter.empty:
+        fig = px.bar(
+            df_filter,
             x="Bulan",
-            y="Tayangan",
-            markers=True,
-            text="Tayangan"
+            y="Total Interaksi",
+            text="Total Interaksi"
         )
 
-        fig_tayangan.update_traces(
+        fig.update_traces(
             texttemplate="%{y:,.0f}",
-            textposition="top center",
-            hovertemplate=(
-                "Bulan: %{x}<br>"
-                "Tayangan: %{y:,.0f}<extra></extra>"
-            )
-        )
-
-        fig_tayangan.update_layout(
-            xaxis_title="Bulan",
-            yaxis_title="Jumlah Tayangan",
-            hovermode="x unified"
-        )
-
-        st.plotly_chart(
-            fig_tayangan,
-            use_container_width=True
-        )
-
-    # Grafik interaksi dan profil
-    kolom_grafik1, kolom_grafik2 = st.columns(2)
-
-    with kolom_grafik1:
-        st.subheader("💬 Total Interaksi")
-
-        data_interaksi = df_valid.dropna(
-            subset=["Total Interaksi"]
-        )
-
-        if not data_interaksi.empty:
-            fig_interaksi = px.bar(
-                data_interaksi,
-                x="Bulan",
-                y="Total Interaksi",
-                text="Total Interaksi"
-            )
-
-            fig_interaksi.update_traces(
-                texttemplate="%{y:,.0f}",
-                textposition="outside"
-            )
-
-            fig_interaksi.update_layout(
-                xaxis_title="Bulan",
-                yaxis_title="Jumlah Interaksi"
-            )
-
-            st.plotly_chart(
-                fig_interaksi,
-                use_container_width=True
-            )
-
-    with kolom_grafik2:
-        st.subheader("👤 Kunjungan Profil")
-
-        data_profil = df_valid.dropna(
-            subset=["Kunjungan Profil"]
-        )
-
-        if not data_profil.empty:
-            fig_profil = px.bar(
-                data_profil,
-                x="Bulan",
-                y="Kunjungan Profil",
-                text="Kunjungan Profil"
-            )
-
-            fig_profil.update_traces(
-                texttemplate="%{y:,.0f}",
-                textposition="outside"
-            )
-
-            fig_profil.update_layout(
-                xaxis_title="Bulan",
-                yaxis_title="Jumlah Kunjungan"
-            )
-
-            st.plotly_chart(
-                fig_profil,
-                use_container_width=True
-            )
-
-    # Grafik tautan bio
-    st.subheader("🔗 Perkembangan Ketukan Tautan Bio")
-
-    data_tautan = df_valid.dropna(
-        subset=["Ketukan Tautan Bio"]
-    )
-
-    if not data_tautan.empty:
-        fig_tautan = px.line(
-            data_tautan,
-            x="Bulan",
-            y="Ketukan Tautan Bio",
-            markers=True,
-            text="Ketukan Tautan Bio"
-        )
-
-        fig_tautan.update_traces(
-            texttemplate="%{y:,.0f}",
-            textposition="top center"
-        )
-
-        fig_tautan.update_layout(
-            xaxis_title="Bulan",
-            yaxis_title="Jumlah Ketukan"
-        )
-
-        st.plotly_chart(
-            fig_tautan,
-            use_container_width=True
-        )
-
-    # Grafik follower
-    st.subheader("📊 Pertumbuhan Pengikut")
-
-    data_follower = df_valid.dropna(
-        subset=["Net Follower"]
-    )
-
-    if not data_follower.empty:
-        fig_follower = px.bar(
-            data_follower,
-            x="Bulan",
-            y="Net Follower",
-            text="Net Follower"
-        )
-
-        fig_follower.update_traces(
-            texttemplate="%{y:+,.0f}",
             textposition="outside"
         )
 
-        fig_follower.add_hline(
-            y=0,
-            line_dash="dash"
-        )
-
-        fig_follower.update_layout(
+        fig.update_layout(
             xaxis_title="Bulan",
-            yaxis_title="Pertumbuhan Pengikut"
+            yaxis_title="Jumlah Interaksi"
         )
 
-        st.plotly_chart(
-            fig_follower,
-            use_container_width=True
+        st.plotly_chart(fig, use_container_width=True)
+
+with kolom2:
+    st.subheader("👤 Kunjungan Profil")
+
+    if not df_filter.empty:
+        fig = px.bar(
+            df_filter,
+            x="Bulan",
+            y="Kunjungan Profil",
+            text="Kunjungan Profil"
         )
+
+        fig.update_traces(
+            texttemplate="%{y:,.0f}",
+            textposition="outside"
+        )
+
+        fig.update_layout(
+            xaxis_title="Bulan",
+            yaxis_title="Jumlah Kunjungan"
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+
+# ==================================================
+# GRAFIK KETUKAN TAUTAN BIO
+# ==================================================
+
+st.subheader("🔗 Perkembangan Ketukan Tautan Bio")
+
+if not df_filter.empty:
+    fig = px.line(
+        df_filter,
+        x="Bulan",
+        y="Ketukan Tautan Bio",
+        markers=True,
+        text="Ketukan Tautan Bio"
+    )
+
+    fig.update_traces(
+        texttemplate="%{y:,.0f}",
+        textposition="top center"
+    )
+
+    fig.update_layout(
+        xaxis_title="Bulan",
+        yaxis_title="Jumlah Ketukan"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+# ==================================================
+# GRAFIK PERTUMBUHAN FOLLOWER
+# ==================================================
+
+st.subheader("📊 Pertumbuhan Pengikut")
+
+if not df_filter.empty:
+    fig = px.bar(
+        df_filter,
+        x="Bulan",
+        y="Net Follower",
+        text="Net Follower"
+    )
+
+    fig.update_traces(
+        texttemplate="%{y:+,.0f}",
+        textposition="outside"
+    )
+
+    fig.add_hline(
+        y=0,
+        line_dash="dash"
+    )
+
+    fig.update_layout(
+        xaxis_title="Bulan",
+        yaxis_title="Pertumbuhan Pengikut"
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
 
 # ==================================================
 # TABEL DATA
@@ -386,11 +354,19 @@ else:
 st.divider()
 st.subheader("📋 Tabel Performa Media Sosial")
 
+tabel = df_filter.copy()
+
+for kolom in KOLOM_ANGKA:
+    tabel[kolom] = tabel[kolom].apply(
+        lambda x: fmt(x) if pd.notna(x) else "-"
+    )
+
 st.dataframe(
-    df_filter,
+    tabel,
     use_container_width=True,
     hide_index=True
 )
+
 
 # ==================================================
 # INSIGHT OTOMATIS
@@ -399,61 +375,56 @@ st.dataframe(
 st.divider()
 st.subheader("💡 Insight Otomatis")
 
-if not df_valid.empty:
+if not df_filter.empty:
 
-    data_tayangan = df_valid.dropna(subset=["Tayangan"])
-    data_interaksi = df_valid.dropna(subset=["Total Interaksi"])
-    data_follower = df_valid.dropna(subset=["Net Follower"])
+    tayangan = df_filter.dropna(subset=["Tayangan"])
+    interaksi = df_filter.dropna(subset=["Total Interaksi"])
+    follower = df_filter.dropna(subset=["Net Follower"])
 
-    if not data_tayangan.empty:
-        idx = data_tayangan["Tayangan"].idxmax()
-        bulan = data_tayangan.loc[idx, "Bulan"]
-        nilai = data_tayangan.loc[idx, "Tayangan"]
+    if not tayangan.empty:
+        baris = tayangan.loc[tayangan["Tayangan"].idxmax()]
 
         st.success(
-            f"**Tayangan tertinggi:** {bulan}, "
-            f"sebanyak {format_angka(nilai)} tayangan."
+            f"**Tayangan tertinggi:** {baris['Bulan']} "
+            f"dengan {fmt(baris['Tayangan'])} tayangan."
         )
 
-    if not data_interaksi.empty:
-        idx = data_interaksi["Total Interaksi"].idxmax()
-        bulan = data_interaksi.loc[idx, "Bulan"]
-        nilai = data_interaksi.loc[idx, "Total Interaksi"]
+    if not interaksi.empty:
+        baris = interaksi.loc[
+            interaksi["Total Interaksi"].idxmax()
+        ]
 
         st.info(
-            f"**Interaksi tertinggi:** {bulan}, "
-            f"sebanyak {format_angka(nilai)} interaksi."
+            f"**Interaksi tertinggi:** {baris['Bulan']} "
+            f"dengan {fmt(baris['Total Interaksi'])} interaksi."
         )
 
-    if not data_follower.empty:
-        idx_max = data_follower["Net Follower"].idxmax()
-        idx_min = data_follower["Net Follower"].idxmin()
-
-        bulan_max = data_follower.loc[idx_max, "Bulan"]
-        nilai_max = data_follower.loc[idx_max, "Net Follower"]
-
-        bulan_min = data_follower.loc[idx_min, "Bulan"]
-        nilai_min = data_follower.loc[idx_min, "Net Follower"]
+    if not follower.empty:
+        baris_max = follower.loc[
+            follower["Net Follower"].idxmax()
+        ]
 
         st.success(
-            f"**Pertumbuhan pengikut tertinggi:** {bulan_max}, "
-            f"dengan net follower {format_angka(nilai_max, True)}."
+            f"**Pertumbuhan pengikut tertinggi:** "
+            f"{baris_max['Bulan']} dengan net follower "
+            f"{fmt(baris_max['Net Follower'], plus=True)}."
         )
 
-        if nilai_min < 0:
+        baris_min = follower.loc[
+            follower["Net Follower"].idxmin()
+        ]
+
+        if baris_min["Net Follower"] < 0:
             st.warning(
-                f"**Penurunan pengikut terbesar:** {bulan_min}, "
-                f"dengan net follower {format_angka(nilai_min, True)}. "
-                "Periode ini perlu dievaluasi lebih lanjut."
-            )
-        else:
-            st.info(
-                f"**Net follower terendah:** {bulan_min}, "
-                f"dengan {format_angka(nilai_min, True)} pengikut."
+                f"**Penurunan pengikut terbesar:** "
+                f"{baris_min['Bulan']} dengan net follower "
+                f"{fmt(baris_min['Net Follower'], plus=True)}. "
+                "Periode ini perlu dievaluasi."
             )
 
 else:
-    st.info("Insight akan muncul setelah data tersedia.")
+    st.info("Belum ada data untuk menghasilkan insight.")
+
 
 # ==================================================
 # FOOTER
@@ -462,6 +433,6 @@ else:
 st.divider()
 
 st.caption(
-    "Dashboard Performa Media Sosial Bengkel Mahaputra | "
-    "Data bersumber dari GitHub"
+    "Dashboard Performa Media Sosial Bengkel Mahaputra "
+    "| Data bersumber dari GitHub"
 )
