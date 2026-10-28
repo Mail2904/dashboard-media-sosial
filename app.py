@@ -5,11 +5,11 @@ import plotly.graph_objects as go
 import re
 
 # ==================================================
-# 1. KONFIGURASI
+# KONFIGURASI HALAMAN
 # ==================================================
 
 st.set_page_config(
-    page_title="Dashboard Media Sosial Mahaputra",
+    page_title="Dashboard Performa Media Sosial",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -20,19 +20,28 @@ BASE_URL = (
     "Mail2904/dashboard-media-sosial/main/"
 )
 
-IG_URL = BASE_URL + "data.csv"
-TT_URL = BASE_URL + "tiktok.csv"
+INSTAGRAM_URL = BASE_URL + "data.csv"
+TIKTOK_URL = BASE_URL + "tiktok.csv"
 
 BULAN = [
-    "Januari", "Februari", "Maret",
-    "April", "Mei", "Juni",
-    "Juli", "Agustus", "September",
-    "Oktober", "November", "Desember"
+    "Januari", "Februari", "Maret", "April",
+    "Mei", "Juni", "Juli", "Agustus",
+    "September", "Oktober", "November", "Desember"
 ]
 
 MAP_BULAN = {
-    nama.lower(): nomor
-    for nomor, nama in enumerate(BULAN, 1)
+    "jan": 1, "januari": 1,
+    "feb": 2, "februari": 2,
+    "mar": 3, "maret": 3,
+    "apr": 4, "april": 4,
+    "mei": 5, "may": 5,
+    "jun": 6, "juni": 6,
+    "jul": 7, "juli": 7,
+    "agu": 8, "agt": 8, "aug": 8, "agustus": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "okt": 10, "oct": 10, "oktober": 10,
+    "nov": 11, "november": 11,
+    "des": 12, "dec": 12, "desember": 12
 }
 
 KOLOM_IG = [
@@ -43,7 +52,7 @@ KOLOM_IG = [
     "Net Follower"
 ]
 
-KOLOM_TT = [
+KOLOM_TIKTOK = [
     "Tayangan",
     "Net Follower"
 ]
@@ -73,7 +82,7 @@ TARGET = {
 
 
 # ==================================================
-# 2. TAMPILAN CSS
+# CSS TAMPILAN
 # ==================================================
 
 st.markdown("""
@@ -82,56 +91,42 @@ st.markdown("""
     padding-top: 1.5rem;
     padding-bottom: 2rem;
 }
-
-h1, h2, h3 {
-    font-weight: 700;
-}
-
 .kpi-card {
     border: 1px solid #e5e7eb;
     border-radius: 12px;
     padding: 18px;
     margin-bottom: 12px;
-    background: #f8fafc;
     color: #111827;
 }
-
 .kpi-success {
-    background: #ecfdf5;
+    background-color: #ecfdf5;
     border-color: #16a34a;
 }
-
 .kpi-failed {
-    background: #fef2f2;
+    background-color: #fef2f2;
     border-color: #dc2626;
 }
-
 .kpi-title {
     font-size: 14px;
     font-weight: 600;
 }
-
 .kpi-value {
     font-size: 27px;
     font-weight: 750;
     margin-top: 8px;
 }
-
 .kpi-target {
     font-size: 13px;
     margin-top: 5px;
 }
-
 .kpi-status {
     font-size: 14px;
     font-weight: 700;
     margin-top: 10px;
 }
-
 .success-text {
     color: #15803d;
 }
-
 .failed-text {
     color: #b91c1c;
 }
@@ -140,72 +135,96 @@ h1, h2, h3 {
 
 
 # ==================================================
-# 3. FUNGSI FORMAT
+# FUNGSI FORMAT
 # ==================================================
 
-def angka(nilai):
+def format_angka(nilai):
     if pd.isna(nilai):
         return "-"
     return f"{int(nilai):,}".replace(",", ".")
 
 
-def persen(nilai):
-    return f"{nilai:.1f}".replace(".", ",") + "%"
+def format_persen(nilai):
+    return f"{nilai:.1f}%".replace(".", ",")
 
 
-def status(aktual, target):
+def status_kpi(aktual, target):
     if aktual >= target:
-        return "Tercapai"
-    return "Belum Tercapai"
+        return "🟢 Tercapai"
+    return "🔴 Belum Tercapai"
 
 
 def kartu_kpi(judul, aktual, target):
 
-    capaian = (
-        aktual / target * 100
-        if target > 0 else 0
-    )
-
+    capaian = aktual / target * 100 if target else 0
     berhasil = aktual >= target
 
-    kelas = (
-        "kpi-success"
-        if berhasil else "kpi-failed"
-    )
-
-    warna = (
-        "success-text"
-        if berhasil else "failed-text"
-    )
-
-    teks = (
-        "TERCAPAI"
-        if berhasil else "BELUM TERCAPAI"
-    )
+    kelas = "kpi-success" if berhasil else "kpi-failed"
+    warna = "success-text" if berhasil else "failed-text"
+    status = "TERCAPAI" if berhasil else "BELUM TERCAPAI"
 
     st.markdown(
         f"""
         <div class="kpi-card {kelas}">
             <div class="kpi-title">{judul}</div>
-            <div class="kpi-value">{angka(aktual)}</div>
+            <div class="kpi-value">{format_angka(aktual)}</div>
             <div class="kpi-target">
-                Target: {angka(target)}
+                Target: {format_angka(target)}
             </div>
             <div class="kpi-status {warna}">
-                {teks} | {persen(capaian)}
+                {status} | {format_persen(capaian)}
             </div>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    st.progress(
-        min(max(capaian / 100, 0), 1)
-    )
+    st.progress(min(max(capaian / 100, 0), 1))
 
 
 # ==================================================
-# 4. MEMBACA DAN MEMBERSIHKAN DATABASE
+# FUNGSI MEMBACA BULAN
+# ==================================================
+
+def parse_bulan(teks, tahun_kolom=""):
+
+    teks = str(teks).strip()
+
+    cocok = re.fullmatch(
+        r"([A-Za-z]+)[\s\-/]*(\d{2,4})?",
+        teks
+    )
+
+    if not cocok:
+        raise ValueError(
+            f"Format bulan tidak valid: {teks}"
+        )
+
+    nama_bulan = cocok.group(1).lower()
+    tahun_teks = cocok.group(2)
+
+    if nama_bulan not in MAP_BULAN:
+        raise ValueError(
+            f"Nama bulan tidak dikenal: {teks}"
+        )
+
+    nomor_bulan = MAP_BULAN[nama_bulan]
+
+    if str(tahun_kolom).strip():
+        tahun_teks = str(tahun_kolom).strip()
+
+    if not tahun_teks:
+        tahun = 2026
+    else:
+        tahun = int(tahun_teks)
+        if len(tahun_teks) == 2:
+            tahun += 2000
+
+    return nomor_bulan, tahun
+
+
+# ==================================================
+# FUNGSI MEMBACA DATABASE GITHUB
 # ==================================================
 
 @st.cache_data(ttl=60)
@@ -222,18 +241,18 @@ def load_data(url, platform):
     wajib = (
         KOLOM_IG
         if platform == "Instagram"
-        else KOLOM_TT
+        else KOLOM_TIKTOK
     )
 
-    hilang = [
+    kolom_hilang = [
         k for k in ["Bulan"] + wajib
         if k not in df.columns
     ]
 
-    if hilang:
+    if kolom_hilang:
         raise ValueError(
-            f"Kolom {platform} tidak tersedia: "
-            + ", ".join(hilang)
+            f"Kolom {platform} tidak ditemukan: "
+            + ", ".join(kolom_hilang)
         )
 
     df = df[
@@ -242,58 +261,26 @@ def load_data(url, platform):
 
     if df.empty:
         raise ValueError(
-            f"Database {platform} tidak memiliki data."
+            f"Database {platform} kosong."
         )
-
-    # Mengolah bulan dan tahun tanpa assignment
-    # ArrowStringArray ke kolom float64.
 
     nomor_bulan = []
     daftar_tahun = []
 
     for _, row in df.iterrows():
 
-        teks = str(row["Bulan"]).strip()
-
-        cocok = re.fullmatch(
-            r"([A-Za-z]+)(?:\s+(\d{4}))?",
-            teks
+        tahun_kolom = (
+            row["Tahun"]
+            if "Tahun" in df.columns
+            else ""
         )
 
-        if not cocok:
-            raise ValueError(
-                f"Format bulan tidak valid: {teks}"
-            )
+        nomor, tahun = parse_bulan(
+            row["Bulan"],
+            tahun_kolom
+        )
 
-        nama = cocok.group(1).lower()
-
-        if nama not in MAP_BULAN:
-            raise ValueError(
-                f"Nama bulan tidak dikenal: {teks}"
-            )
-
-        nomor_bulan.append(MAP_BULAN[nama])
-
-        tahun_teks = cocok.group(2)
-
-        if "Tahun" in df.columns:
-            nilai_tahun = str(
-                row["Tahun"]
-            ).strip()
-
-            if nilai_tahun:
-                tahun_teks = nilai_tahun
-
-        if not tahun_teks:
-            tahun_teks = "2026"
-
-        try:
-            tahun = int(tahun_teks)
-        except ValueError:
-            raise ValueError(
-                f"Tahun tidak valid: {tahun_teks}"
-            )
-
+        nomor_bulan.append(nomor)
         daftar_tahun.append(tahun)
 
     df["_Bulan"] = pd.Series(
@@ -313,15 +300,9 @@ def load_data(url, platform):
         for i in nomor_bulan
     ]
 
-    # Membersihkan angka.
-    # Titik ribuan dan koma desimal didukung.
-    # Tidak ada perkalian otomatis.
-
     kolom_angka = [
         k for k in df.columns
-        if k not in [
-            "Bulan", "Tahun", "_Bulan"
-        ]
+        if k not in ["Bulan", "Tahun", "_Bulan"]
     ]
 
     for kolom in kolom_angka:
@@ -331,26 +312,19 @@ def load_data(url, platform):
         for nilai in df[kolom]:
 
             teks = str(nilai).strip()
+            teks = teks.replace(" ", "")
 
             if teks == "":
                 nilai_bersih.append(None)
                 continue
 
-            teks = teks.replace(" ", "")
-
             if "." in teks and "," in teks:
-                teks = (
-                    teks.replace(".", "")
-                    .replace(",", ".")
-                )
+                teks = teks.replace(".", "").replace(",", ".")
 
             elif "," in teks:
                 teks = teks.replace(",", ".")
 
-            elif re.fullmatch(
-                r"-?\d{1,3}(\.\d{3})+",
-                teks
-            ):
+            elif re.fullmatch(r"-?\d{1,3}(\.\d{3})+", teks):
                 teks = teks.replace(".", "")
 
             try:
@@ -359,33 +333,19 @@ def load_data(url, platform):
                 nilai_bersih.append(None)
 
         df[kolom] = pd.to_numeric(
-            pd.Series(
-                nilai_bersih,
-                index=df.index
-            ),
+            pd.Series(nilai_bersih, index=df.index),
             errors="coerce"
         )
 
-    # Kolom wajib tidak boleh kosong.
     if df[wajib].isna().any().any():
-
-        masalah = []
-
-        for kolom in wajib:
-            if df[kolom].isna().any():
-                masalah.append(kolom)
-
         raise ValueError(
-            f"Data {platform} tidak valid "
-            f"pada kolom: {', '.join(masalah)}"
+            f"Data {platform} memiliki nilai kosong "
+            "atau angka tidak valid."
         )
 
-    # Memeriksa bulan ganda.
-    if df.duplicated(
-        ["Tahun", "_Bulan"]
-    ).any():
+    if df.duplicated(["Tahun", "_Bulan"]).any():
         raise ValueError(
-            f"Terdapat bulan ganda di {platform}."
+            f"Terdapat bulan ganda pada {platform}."
         )
 
     df = df.sort_values(
@@ -393,42 +353,32 @@ def load_data(url, platform):
     ).reset_index(drop=True)
 
     df["Periode"] = (
-        df["Bulan"] + " "
-        + df["Tahun"].astype(str)
+        df["Bulan"] + " " + df["Tahun"].astype(str)
     )
 
     return df
 
 
 # ==================================================
-# 5. FUNGSI GRAFIK
+# FUNGSI GRAFIK
 # ==================================================
 
-def atur_grafik(fig):
+def format_grafik(fig):
 
     fig.update_layout(
-        margin=dict(
-            l=15, r=15, t=45, b=15
-        ),
+        margin=dict(l=15, r=15, t=45, b=15),
         hovermode="x unified",
         legend_title_text="",
         font=dict(size=12)
     )
 
-    fig.update_xaxes(
-        title=None,
-        type="category"
-    )
-
-    fig.update_yaxes(
-        title=None,
-        separatethousands=True
-    )
+    fig.update_xaxes(title=None, type="category")
+    fig.update_yaxes(title=None, separatethousands=True)
 
     return fig
 
 
-def grafik_garis(df, kolom, judul):
+def grafik_line(df, kolom, judul):
 
     st.subheader(judul)
 
@@ -441,22 +391,16 @@ def grafik_garis(df, kolom, judul):
 
     fig.update_traces(
         mode="lines+markers+text",
-        text=[
-            angka(v) if pd.notna(v) else ""
-            for v in df[kolom]
-        ],
+        text=[format_angka(v) for v in df[kolom]],
         textposition="top center"
     )
 
-    atur_grafik(fig)
+    format_grafik(fig)
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    st.plotly_chart(fig, use_container_width=True)
 
 
-def grafik_batang(df, kolom, judul):
+def grafik_bar(df, kolom, judul):
 
     st.subheader(judul)
 
@@ -468,10 +412,7 @@ def grafik_batang(df, kolom, judul):
     )
 
     fig.update_traces(
-        text=[
-            angka(v) if pd.notna(v) else ""
-            for v in df[kolom]
-        ],
+        text=[format_angka(v) for v in df[kolom]],
         textposition="outside",
         cliponaxis=False
     )
@@ -480,43 +421,33 @@ def grafik_batang(df, kolom, judul):
 
         fig.update_traces(
             marker_color=[
-                "#16a34a" if v >= 0
-                else "#dc2626"
+                "#16a34a" if v >= 0 else "#dc2626"
                 for v in df[kolom]
             ]
         )
 
-        fig.add_hline(
-            y=0,
-            line_dash="dash"
-        )
+        fig.add_hline(y=0, line_dash="dash")
 
-    atur_grafik(fig)
+    format_grafik(fig)
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    st.plotly_chart(fig, use_container_width=True)
 
 
-def grafik_banding(ig, tt, kolom, judul):
+def grafik_perbandingan(ig, tt, kolom, judul):
 
     st.subheader(judul)
 
-    data = pd.concat(
-        [
-            ig[["Periode", kolom]].assign(
-                Platform="Instagram"
-            ),
-            tt[["Periode", kolom]].assign(
-                Platform="TikTok"
-            )
-        ],
-        ignore_index=True
-    )
+    data = pd.concat([
+        ig[["Periode", kolom]].assign(
+            Platform="Instagram"
+        ),
+        tt[["Periode", kolom]].assign(
+            Platform="TikTok"
+        )
+    ], ignore_index=True)
 
     if data.empty:
-        st.info("Belum ada data grafik.")
+        st.info("Belum ada data untuk dibandingkan.")
         return
 
     fig = px.bar(
@@ -537,24 +468,17 @@ def grafik_banding(ig, tt, kolom, judul):
         cliponaxis=False
     )
 
-    atur_grafik(fig)
+    format_grafik(fig)
 
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
+    st.plotly_chart(fig, use_container_width=True)
 
 
 # ==================================================
-# 6. NAVIGASI SIDEBAR
+# SIDEBAR
 # ==================================================
 
 st.sidebar.title("📊 Dashboard Mahaputra")
-
-st.sidebar.caption(
-    "Monitoring Performa Media Sosial"
-)
-
+st.sidebar.caption("Monitoring Performa Media Sosial")
 st.sidebar.divider()
 
 halaman = st.sidebar.radio(
@@ -578,47 +502,37 @@ if st.sidebar.button(
 st.sidebar.markdown("**Database GitHub**")
 
 st.sidebar.markdown(
-    "[Data Instagram](https://github.com/"
-    "Mail2904/dashboard-media-sosial/"
-    "blob/main/data.csv)"
+    "[Instagram - data.csv]"
+    "(https://github.com/Mail2904/"
+    "dashboard-media-sosial/blob/main/data.csv)"
 )
 
 st.sidebar.markdown(
-    "[Data TikTok](https://github.com/"
-    "Mail2904/dashboard-media-sosial/"
-    "blob/main/tiktok.csv)"
+    "[TikTok - tiktok.csv]"
+    "(https://github.com/Mail2904/"
+    "dashboard-media-sosial/blob/main/tiktok.csv)"
 )
 
 
 # ==================================================
-# 7. JUDUL AWAL DAN MEMUAT DATA
+# MEMUAT DATA
 # ==================================================
 
 st.title("📊 Dashboard Performa Media Sosial")
-
-st.caption(
-    "Bengkel Mahaputra | Instagram & TikTok"
-)
+st.caption("Bengkel Mahaputra | Instagram & TikTok")
 
 try:
 
-    df_ig = load_data(
-        IG_URL,
-        "Instagram"
-    )
-
-    df_tt = load_data(
-        TT_URL,
-        "TikTok"
-    )
+    df_ig = load_data(INSTAGRAM_URL, "Instagram")
+    df_tt = load_data(TIKTOK_URL, "TikTok")
 
 except Exception as e:
 
     st.error("Database gagal dimuat.")
 
     st.warning(
-        "Periksa isi data.csv dan tiktok.csv. "
-        "Pastikan nama kolom dan format data sesuai."
+        "Periksa data.csv dan tiktok.csv pada GitHub. "
+        "Pastikan kolom dan format data sesuai."
     )
 
     st.code(str(e))
@@ -626,75 +540,63 @@ except Exception as e:
 
 
 # ==================================================
-# 8. FILTER PERIODE
+# FILTER TAHUN DAN BULAN
 # ==================================================
 
-tahun_tersedia = sorted(
-    set(df_ig["Tahun"])
-    | set(df_tt["Tahun"])
+semua_tahun = sorted(
+    set(df_ig["Tahun"]) | set(df_tt["Tahun"])
 )
 
 tahun = st.sidebar.selectbox(
     "Pilih Tahun",
-    tahun_tersedia,
-    index=len(tahun_tersedia) - 1
+    semua_tahun,
+    index=len(semua_tahun) - 1
 )
 
-ig_tahun = df_ig[
-    df_ig["Tahun"] == tahun
-].copy()
+ig_tahun = df_ig[df_ig["Tahun"] == tahun].copy()
+tt_tahun = df_tt[df_tt["Tahun"] == tahun].copy()
 
-tt_tahun = df_tt[
-    df_tt["Tahun"] == tahun
-].copy()
-
-nomor_tersedia = sorted(
-    set(ig_tahun["_Bulan"])
-    | set(tt_tahun["_Bulan"])
+nomor_bulan = sorted(
+    set(ig_tahun["_Bulan"]) | set(tt_tahun["_Bulan"])
 )
 
-bulan_tersedia = [
-    BULAN[i - 1]
-    for i in nomor_tersedia
-]
+semua_bulan = [BULAN[i - 1] for i in nomor_bulan]
 
-bulan_pilih = st.sidebar.multiselect(
+bulan_dipilih = st.sidebar.multiselect(
     "Filter Bulan",
-    bulan_tersedia,
-    default=bulan_tersedia
+    semua_bulan,
+    default=semua_bulan
 )
 
 ig_show = ig_tahun[
-    ig_tahun["Bulan"].isin(bulan_pilih)
+    ig_tahun["Bulan"].isin(bulan_dipilih)
 ].copy()
 
 tt_show = tt_tahun[
-    tt_tahun["Bulan"].isin(bulan_pilih)
+    tt_tahun["Bulan"].isin(bulan_dipilih)
 ].copy()
 
 
 # ==================================================
-# 9. HALAMAN UTAMA
+# HALAMAN 1 - DASHBOARD UTAMA
 # ==================================================
 
 if halaman == "🏠 Dashboard Utama":
 
-    st.header("🏠 Ringkasan Performa")
+    st.header("🏠 Ringkasan Performa Media Sosial")
 
     st.markdown(
-        "Perbandingan performa Instagram dan TikTok "
-        f"pada tahun **{tahun}**."
+        f"Perbandingan performa Instagram dan TikTok "
+        f"Bengkel Mahaputra pada tahun **{tahun}**."
     )
 
     st.divider()
 
-    # ----------------------------------------------
     # RINGKASAN
-    # ----------------------------------------------
 
-    a, b = st.columns(2)
+    kiri, kanan = st.columns(2)
 
-    with a:
+    with kiri:
 
         st.subheader("📸 Instagram")
 
@@ -702,15 +604,15 @@ if halaman == "🏠 Dashboard Utama":
 
         c1.metric(
             "Total Tayangan",
-            angka(ig_show["Tayangan"].sum())
+            format_angka(ig_show["Tayangan"].sum())
         )
 
         c2.metric(
             "Net Follower",
-            angka(ig_show["Net Follower"].sum())
+            format_angka(ig_show["Net Follower"].sum())
         )
 
-    with b:
+    with kanan:
 
         st.subheader("🎵 TikTok")
 
@@ -718,25 +620,23 @@ if halaman == "🏠 Dashboard Utama":
 
         c1.metric(
             "Total Tayangan",
-            angka(tt_show["Tayangan"].sum())
+            format_angka(tt_show["Tayangan"].sum())
         )
 
         c2.metric(
             "Net Follower",
-            angka(tt_show["Net Follower"].sum())
+            format_angka(tt_show["Net Follower"].sum())
         )
 
     st.caption(
         "Ringkasan mengikuti filter bulan. "
-        "KPI tahunan dihitung dari seluruh bulan "
-        "yang tersedia pada tahun terpilih."
+        "KPI tahunan menggunakan seluruh data "
+        "pada tahun yang dipilih."
     )
 
     st.divider()
 
-    # ----------------------------------------------
     # KPI TAHUNAN
-    # ----------------------------------------------
 
     st.header("🎯 KPI Keberhasilan Tahunan")
 
@@ -776,18 +676,16 @@ if halaman == "🏠 Dashboard Utama":
 
     st.divider()
 
-    # ----------------------------------------------
     # KPI BULANAN
-    # ----------------------------------------------
 
     st.header("🎯 KPI Keberhasilan Bulanan")
 
-    if bulan_tersedia:
+    if semua_bulan:
 
         bulan_kpi = st.selectbox(
             "Pilih Bulan Evaluasi",
-            bulan_tersedia,
-            index=len(bulan_tersedia) - 1
+            semua_bulan,
+            index=len(semua_bulan) - 1
         )
 
         ig_bulan = ig_tahun[
@@ -844,11 +742,9 @@ if halaman == "🏠 Dashboard Utama":
 
     st.divider()
 
-    # ----------------------------------------------
     # REKAP KPI
-    # ----------------------------------------------
 
-    st.header("📋 Rekap KPI Bulanan")
+    st.header("📋 Rekap Pencapaian KPI Bulanan")
 
     rekap = []
 
@@ -867,12 +763,12 @@ if halaman == "🏠 Dashboard Utama":
                 "Bulan": row["Bulan"],
                 "Followers": int(row["Net Follower"]),
                 "Target Followers": tf,
-                "Status Followers": status(
+                "Status Followers": status_kpi(
                     row["Net Follower"], tf
                 ),
                 "Viewers": int(row["Tayangan"]),
                 "Target Viewers": tv,
-                "Status Viewers": status(
+                "Status Viewers": status_kpi(
                     row["Tayangan"], tv
                 )
             })
@@ -882,11 +778,13 @@ if halaman == "🏠 Dashboard Utama":
         tabel_kpi = pd.DataFrame(rekap)
 
         def warna_status(nilai):
-            if nilai == "Tercapai":
+
+            if "🟢" in str(nilai):
                 return (
                     "background-color:#dcfce7;"
                     "color:#166534;"
                 )
+
             return (
                 "background-color:#fee2e2;"
                 "color:#991b1b;"
@@ -906,29 +804,29 @@ if halaman == "🏠 Dashboard Utama":
 
     st.divider()
 
-    # ----------------------------------------------
-    # PERBANDINGAN
-    # ----------------------------------------------
+    # GRAFIK PERBANDINGAN
 
-    st.header("📊 Perbandingan Media Sosial")
+    st.header("📊 Perbandingan Performa")
 
-    grafik_banding(
+    grafik_perbandingan(
         ig_show,
         tt_show,
         "Tayangan",
-        "Perbandingan Tayangan"
+        "Perbandingan Tayangan Instagram dan TikTok"
     )
 
-    grafik_banding(
+    grafik_perbandingan(
         ig_show,
         tt_show,
         "Net Follower",
-        "Perbandingan Net Follower"
+        "Perbandingan Pertumbuhan Followers"
     )
 
     st.divider()
 
-    st.header("💡 Ringkasan Otomatis")
+    # RINGKASAN OTOMATIS
+
+    st.header("💡 Ringkasan Perbandingan")
 
     ig_view = ig_show["Tayangan"].sum()
     tt_view = tt_show["Tayangan"].sum()
@@ -953,69 +851,62 @@ if halaman == "🏠 Dashboard Utama":
     c1, c2 = st.columns(2)
 
     c1.info(
-        "**Tayangan tertinggi**\n\n"
+        "**Platform dengan tayangan tertinggi**\n\n"
         + unggul_view
     )
 
     c2.info(
-        "**Pertumbuhan follower tertinggi**\n\n"
+        "**Platform dengan pertumbuhan follower tertinggi**\n\n"
         + unggul_follow
     )
 
 
 # ==================================================
-# 10. HALAMAN INSTAGRAM
+# HALAMAN 2 - INSTAGRAM
 # ==================================================
 
 elif halaman == "📸 Performa Instagram":
 
-    st.header("📸 Performa Instagram")
+    st.header("📸 Dashboard Performa Instagram")
 
     if ig_show.empty:
 
         st.info(
-            "Tidak ada data Instagram pada "
-            "periode yang dipilih."
+            "Tidak ada data Instagram untuk periode ini."
         )
 
     else:
 
-        total_tayangan = ig_show["Tayangan"].sum()
-        total_interaksi = ig_show["Total Interaksi"].sum()
-        total_kunjungan = ig_show["Kunjungan Profil"].sum()
-        total_tautan = ig_show["Ketukan Tautan Bio"].sum()
-        total_follower = ig_show["Net Follower"].sum()
-
         k1, k2, k3, k4, k5 = st.columns(5)
 
         k1.metric(
-            "👁️ Tayangan",
-            angka(total_tayangan)
+            "👁️ Total Tayangan",
+            format_angka(ig_show["Tayangan"].sum())
         )
 
         k2.metric(
-            "💬 Interaksi",
-            angka(total_interaksi)
+            "💬 Total Interaksi",
+            format_angka(ig_show["Total Interaksi"].sum())
         )
 
         k3.metric(
             "👤 Kunjungan Profil",
-            angka(total_kunjungan)
+            format_angka(ig_show["Kunjungan Profil"].sum())
         )
 
         k4.metric(
             "🔗 Ketukan Tautan",
-            angka(total_tautan)
+            format_angka(ig_show["Ketukan Tautan Bio"].sum())
         )
 
         k5.metric(
             "📈 Net Follower",
-            angka(total_follower)
+            format_angka(ig_show["Net Follower"].sum())
         )
 
         st.divider()
 
-        grafik_garis(
+        grafik_line(
             ig_show,
             "Tayangan",
             "📈 Tren Tayangan Instagram"
@@ -1024,14 +915,16 @@ elif halaman == "📸 Performa Instagram":
         kiri, kanan = st.columns(2)
 
         with kiri:
-            grafik_batang(
+
+            grafik_bar(
                 ig_show,
                 "Total Interaksi",
                 "💬 Total Interaksi"
             )
 
         with kanan:
-            grafik_batang(
+
+            grafik_bar(
                 ig_show,
                 "Kunjungan Profil",
                 "👤 Kunjungan Profil"
@@ -1039,15 +932,15 @@ elif halaman == "📸 Performa Instagram":
 
         st.divider()
 
-        grafik_garis(
+        grafik_line(
             ig_show,
             "Ketukan Tautan Bio",
-            "🔗 Ketukan Tautan Bio"
+            "🔗 Tren Ketukan Tautan Bio"
         )
 
         st.divider()
 
-        grafik_batang(
+        grafik_bar(
             ig_show,
             "Net Follower",
             "📈 Pertumbuhan Net Follower"
@@ -1058,9 +951,7 @@ elif halaman == "📸 Performa Instagram":
         st.header("📋 Tabel Data Instagram")
 
         st.dataframe(
-            ig_show[
-                ["Periode"] + KOLOM_IG
-            ],
+            ig_show[["Periode"] + KOLOM_IG],
             use_container_width=True,
             hide_index=True
         )
@@ -1092,13 +983,13 @@ elif halaman == "📸 Performa Instagram":
             st.info(
                 "**Tayangan tertinggi**\n\n"
                 f"{tayangan_max['Periode']}: "
-                f"{angka(tayangan_max['Tayangan'])}"
+                f"{format_angka(tayangan_max['Tayangan'])}"
             )
 
             st.info(
                 "**Interaksi tertinggi**\n\n"
                 f"{interaksi_max['Periode']}: "
-                f"{angka(interaksi_max['Total Interaksi'])}"
+                f"{format_angka(interaksi_max['Total Interaksi'])}"
             )
 
         with kanan:
@@ -1106,29 +997,28 @@ elif halaman == "📸 Performa Instagram":
             st.info(
                 "**Net follower tertinggi**\n\n"
                 f"{follower_max['Periode']}: "
-                f"{angka(follower_max['Net Follower'])}"
+                f"{format_angka(follower_max['Net Follower'])}"
             )
 
             st.info(
                 "**Net follower terendah**\n\n"
                 f"{follower_min['Periode']}: "
-                f"{angka(follower_min['Net Follower'])}"
+                f"{format_angka(follower_min['Net Follower'])}"
             )
 
 
 # ==================================================
-# 11. HALAMAN TIKTOK
+# HALAMAN 3 - TIKTOK
 # ==================================================
 
 elif halaman == "🎵 Performa TikTok":
 
-    st.header("🎵 Performa TikTok")
+    st.header("🎵 Dashboard Performa TikTok")
 
     if tt_show.empty:
 
         st.info(
-            "Tidak ada data TikTok pada "
-            "periode yang dipilih."
+            "Tidak ada data TikTok untuk periode ini."
         )
 
     else:
@@ -1136,31 +1026,24 @@ elif halaman == "🎵 Performa TikTok":
         metrik = [
             k for k in tt_show.columns
             if k not in [
-                "Bulan", "Tahun",
-                "_Bulan", "Periode"
+                "Bulan", "Tahun", "_Bulan", "Periode"
             ]
         ]
 
-        jumlah_kolom = min(
-            len(metrik), 5
-        )
-
-        kartu = st.columns(jumlah_kolom)
+        kartu = st.columns(min(len(metrik), 5))
 
         for i, kolom in enumerate(metrik):
 
-            with kartu[i % jumlah_kolom]:
+            with kartu[i % len(kartu)]:
 
                 st.metric(
                     kolom,
-                    angka(
-                        tt_show[kolom].sum()
-                    )
+                    format_angka(tt_show[kolom].sum())
                 )
 
         st.divider()
 
-        grafik_garis(
+        grafik_line(
             tt_show,
             "Tayangan",
             "📈 Tren Tayangan TikTok"
@@ -1168,7 +1051,7 @@ elif halaman == "🎵 Performa TikTok":
 
         st.divider()
 
-        grafik_batang(
+        grafik_bar(
             tt_show,
             "Net Follower",
             "📈 Pertumbuhan Net Follower TikTok"
@@ -1176,20 +1059,17 @@ elif halaman == "🎵 Performa TikTok":
 
         tambahan = [
             k for k in metrik
-            if k not in [
-                "Tayangan", "Net Follower"
-            ]
+            if k not in ["Tayangan", "Net Follower"]
         ]
 
         if tambahan:
 
             st.divider()
-
             st.header("📊 Metrik Tambahan TikTok")
 
             for kolom in tambahan:
 
-                grafik_batang(
+                grafik_bar(
                     tt_show,
                     kolom,
                     f"Tren {kolom}"
@@ -1200,9 +1080,7 @@ elif halaman == "🎵 Performa TikTok":
         st.header("📋 Tabel Data TikTok")
 
         st.dataframe(
-            tt_show[
-                ["Periode"] + metrik
-            ],
+            tt_show[["Periode"] + metrik],
             use_container_width=True,
             hide_index=True
         )
@@ -1230,7 +1108,7 @@ elif halaman == "🎵 Performa TikTok":
             st.info(
                 "**Tayangan tertinggi**\n\n"
                 f"{tayangan_max['Periode']}: "
-                f"{angka(tayangan_max['Tayangan'])}"
+                f"{format_angka(tayangan_max['Tayangan'])}"
             )
 
         with kanan:
@@ -1238,18 +1116,18 @@ elif halaman == "🎵 Performa TikTok":
             st.info(
                 "**Net follower tertinggi**\n\n"
                 f"{follower_max['Periode']}: "
-                f"{angka(follower_max['Net Follower'])}"
+                f"{format_angka(follower_max['Net Follower'])}"
             )
 
         st.info(
             "**Net follower terendah**\n\n"
             f"{follower_min['Periode']}: "
-            f"{angka(follower_min['Net Follower'])}"
+            f"{format_angka(follower_min['Net Follower'])}"
         )
 
 
 # ==================================================
-# 12. FOOTER
+# FOOTER
 # ==================================================
 
 st.divider()
@@ -1260,5 +1138,5 @@ st.caption(
 
 st.caption(
     "Sumber data: data.csv (Instagram) dan "
-    "tiktok.csv (TikTok) pada repositori GitHub."
+    "tiktok.csv (TikTok) dari GitHub."
 )
