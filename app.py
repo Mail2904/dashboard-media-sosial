@@ -61,17 +61,17 @@ TARGET = {
     "Instagram": {
         "Bulanan": {
             "Followers": 45,
-            "Viewers": 85000
+            "Viewers": 45000
         },
         "Tahunan": {
             "Followers": 500,
-            "Viewers": 1000000
+            "Viewers": 100000
         }
     },
     "TikTok": {
         "Bulanan": {
             "Followers": 85,
-            "Viewers": 42000
+            "Viewers": 85000
         },
         "Tahunan": {
             "Followers": 1000,
